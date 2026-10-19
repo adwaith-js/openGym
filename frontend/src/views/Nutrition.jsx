@@ -68,7 +68,7 @@ function EntryEditor({ d, entry, meal, close }) {
     <div className="nut-fields">
       {[['kcal', t('kcal')], ['p', t('Protein')], ['c', t('Carbs')], ['f', t('Fat')]].map(([k, label]) => <label key={k} className="nut-field">
         <span>{label}{k !== 'kcal' && <i> (g)</i>}</span>
-        <NumberField nullable value={v[k]} onChange={x => set(k, x)} placeholder={k === 'kcal' && fromMacros ? String(fromMacros) : ''} />
+        <NumberField className="field" nullable value={v[k]} onChange={x => set(k, x)} placeholder={k === 'kcal' && fromMacros ? String(fromMacros) : ''} />
       </label>)}
     </div>
     {!v.kcal && fromMacros > 0 && <div className="small dim" style={{ marginTop: 6 }}>{t('{0} kcal from the macros', fmtInt(fromMacros))}</div>}
@@ -168,7 +168,7 @@ function QuickAdd({ d, close }) {
     <h3>{t('Quick add')}</h3>
     <label className="nut-field" style={{ fontSize: 13 }}>
       <span>{t('Calories (kcal)')}</span>
-      <NumberField nullable decimal={false} value={kcal} onChange={setKcal} autoFocus />
+      <NumberField className="field" nullable decimal={false} value={kcal} onChange={setKcal} autoFocus />
     </label>
     <div style={{ height: 10 }} />
     <Segmented value={m} onChange={setM} options={mealOptions()} />
@@ -201,7 +201,7 @@ function TargetsEditor({ close }) {
     <div className="nut-fields">
       {[['kcal', t('kcal')], ['p', t('Protein')], ['c', t('Carbs')], ['f', t('Fat')]].map(([k, label]) => <label key={k} className="nut-field">
         <span>{label}{k !== 'kcal' && <i> (g)</i>}</span>
-        <NumberField nullable decimal={false} value={v[k]} onChange={x => setV(o => ({ ...o, [k]: x }))} />
+        <NumberField className="field" nullable decimal={false} value={v[k]} onChange={x => setV(o => ({ ...o, [k]: x }))} />
       </label>)}
     </div>
     {fromMacros > 0 && Math.abs(fromMacros - (Number(v.kcal) || 0)) > 50 && <div className="small" style={{ marginTop: 6, color: 'var(--orange)' }}>{t('The macros add up to {0} kcal', fmtInt(fromMacros))}</div>}
@@ -260,7 +260,7 @@ export default function Nutrition() {
   return <div className="narrow">
     <div className="hdr">
       <button className="iconbtn" onClick={() => nav('/home')} aria-label={t('Home')}><Icon name="chevronLeft" /></button>
-      <div style={{ flex: 1, marginLeft: 10 }}><h1>{t('Nutrition')}</h1><div className="sub">{d === today ? t('Today') : fmtDate(d, true)}</div></div>
+      <div style={{ flex: 1, marginLeft: 10 }}><h1>{t('Nutrition')}</h1><div className="sub">{t('Calories & macros')}</div></div>
       <button className="iconbtn" onClick={targetsSheet} aria-label={t('Daily targets')}><Icon name="target" /></button>
     </div>
 
@@ -286,9 +286,9 @@ export default function Nutrition() {
         <div style={{ height: 10 }} /><Button variant="primary" icon="target" onClick={() => nav('/nutrition/setup')}>{t('Set my targets')}</Button>
       </>}
       <div className="nut-actions">
-        {photo && <Button variant="tinted" icon="camera" onClick={() => photoMealFlow(d)}>{t('Photo')}</Button>}
-        <Button icon="plus" onClick={() => addFoodSheet({ d })}>{t('Add food')}</Button>
-        <Button icon="bolt" onClick={() => quickAddSheet({ d })}>{t('Quick add')}</Button>
+        {photo && <Button size="sm" variant="tinted" icon="camera" onClick={() => photoMealFlow(d)}>{t('Photo')}</Button>}
+        <Button size="sm" icon="plus" onClick={() => addFoodSheet({ d })}>{t('Add food')}</Button>
+        <Button size="sm" icon="bolt" onClick={() => quickAddSheet({ d })}>{t('Quick add')}</Button>
       </div>
     </div>
 

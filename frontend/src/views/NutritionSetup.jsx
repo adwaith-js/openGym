@@ -49,7 +49,7 @@ function Field({ label, unit, value, onChange, decimal = true }) {
   return <label className="nut-field" style={{ fontSize: 14, marginBottom: 12 }}>
     <span>{label}</span>
     <span className="row" style={{ gap: 8 }}>
-      <NumberField nullable decimal={decimal} value={value} onChange={onChange} />
+      <NumberField className="field" nullable decimal={decimal} value={value} onChange={onChange} />
       <span className="muted" style={{ minWidth: 28 }}>{unit}</span>
     </span>
   </label>
@@ -179,7 +179,7 @@ export default function NutritionSetup() {
           <div className="nut-fields">
             {[['kcal', t('kcal')], ['p', t('Protein')], ['c', t('Carbs')], ['f', t('Fat')]].map(([k, label]) => <label key={k} className="nut-field">
               <span>{label}{k !== 'kcal' && <i> (g)</i>}</span>
-              <NumberField nullable decimal={false} value={shown[k]} onChange={x => setEdit(o => ({ ...(o || calc), [k]: x }))} />
+              <NumberField className="field" nullable decimal={false} value={shown[k]} onChange={x => setEdit(o => ({ ...(o || calc), [k]: x }))} />
             </label>)}
           </div>
           {Math.abs(macroKcal(shown) - (Number(shown.kcal) || 0)) > 60 && <div className="small" style={{ marginTop: 6, color: 'var(--orange)' }}>{t('The macros add up to {0} kcal', fmtInt(macroKcal(shown)))}</div>}

@@ -94,7 +94,7 @@ function Review({ d, est, thumb, photo, meal: meal0, note, close }) {
     <div className="nut-fields">
       {[['kcal', t('kcal')], ['p', t('Protein')], ['c', t('Carbs')], ['f', t('Fat')]].map(([f, label]) => <label key={f} className="nut-field">
         <span>{label}{f !== 'kcal' && <i> (g)</i>}</span>
-        <NumberField nullable value={v[f]} onChange={x => setField(f, x)} />
+        <NumberField className="field" nullable value={v[f]} onChange={x => setField(f, x)} />
       </label>)}
     </div>
     <div style={{ height: 10 }} />

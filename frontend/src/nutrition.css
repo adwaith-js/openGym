@@ -18,8 +18,8 @@
 .nut-bars { display: grid; gap: 9px; margin-top: 12px }
 .nut-bar { display: grid; grid-template-columns: 62px 1fr auto; align-items: center; gap: 10px; font-size: 13px }
 .nut-bar-l { color: var(--label-2) }
-.nut-bar-t { height: 7px; border-radius: 4px; background: var(--surface-3); overflow: hidden }
-.nut-bar-f { height: 100%; border-radius: 4px; background: var(--macro); transition: width .35s ease }
+.nut-bar-t { display: block; height: 7px; border-radius: 4px; background: var(--surface-3); overflow: hidden }
+.nut-bar-f { display: block; height: 100%; border-radius: 4px; background: var(--macro); transition: width .35s ease }
 .nut-bar.over .nut-bar-f { background: var(--orange) }
 .nut-bar-v { font-variant-numeric: tabular-nums; color: var(--label); min-width: 78px; text-align: end }
 .nut-bar-v span { color: var(--label-2) }
@@ -32,7 +32,7 @@
 .nut-ring.over { --ring: var(--orange) }
 
 .nut-actions { display: flex; gap: 8px; margin-top: 12px }
-.nut-actions .btn { flex: 1 }
+.nut-actions .btn { flex: 1 1 0; min-width: 0; white-space: nowrap; padding-inline: 8px }
 
 /* The day's log, one section per meal. */
 .nut-meal { margin-top: 14px }
@@ -53,9 +53,9 @@
 .nut-day .iconbtn { width: 32px; height: 32px; font-size: 15px }
 
 /* Macro inputs in the entry sheet: four numbers in a row. */
-.nut-fields { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 10px }
+.nut-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 10px }
 .nut-field { display: grid; gap: 4px; font-size: 12px; color: var(--label-2) }
-.nut-field .field { text-align: center; padding-inline: 4px }
+.nut-field .field { width: 100%; min-width: 0; text-align: center; padding-inline: 4px; font-variant-numeric: tabular-nums }
 .nut-field i { font-style: normal }
 
 /* A suggestion from history, and the Coach's reading of a photo. */

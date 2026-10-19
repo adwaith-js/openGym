@@ -5,7 +5,7 @@ import { EXIDX, matchExercise, betterWeight, isAssisted } from '../lib/exercises
 import { lastBW, streakWeeks, setLabel, modeOf, effortOf, entriesForExercise, metricEntriesForExercise, metricModeForEntry, bestWeightForEntry, completedRepsOf, workoutDay, workoutAt } from '../lib/history.js'
 import { fmtNum, fmtDate, fmtVol, todayISO, isoOf, weekKey, weekStartOf, exerciseNameText } from '../lib/format.js'
 import { speedUnitOf, speedLabel, toSpeed } from '../lib/speed.js'
-import { t, exerciseNameFor, exerciseNameClass, getLang } from '../lib/i18n.js'
+import { t, tn, exerciseNameFor, exerciseNameClass, getLang } from '../lib/i18n.js'
 import { bwSheet, goalSheet, calendarSheet, dayOverrideSheet, workoutDetailSheet, exerciseHistorySheet, WorkoutRow, bwDeltaColor, weighInsSheet } from '../sheets.jsx'
 import LineChart from '../components/LineChart.jsx'
 import Heatmap from '../components/Heatmap.jsx'
@@ -777,7 +777,7 @@ function NutritionTrend({ S, range, onOpen }) {
       <h2 style={{ margin: 0 }}>{t('Calories')}</h2>
       <Button size="sm" variant="ghost" trailingIcon="chevronRight" onClick={onOpen}>{t('Nutrition')}</Button>
     </div>
-    <div className="muted small">{days.length ? t('{0} kcal a day on average over {1} logged days', fmtNum(avg('kcal')), days.length) : t('Nothing logged in this range')}</div>
+    <div className="muted small">{days.length ? tn('{1} kcal a day on average over {0} logged day', '{1} kcal a day on average over {0} logged days', days.length, fmtNum(avg('kcal'))) : t('Nothing logged in this range')}</div>
     <div className="chart"><LineChart points={pts('kcal')} h={140} unit="kcal" goal={tg?.kcal || null} /></div>
     <h2 style={{ margin: '14px 0 0' }}>{t('Protein')}</h2>
     <div className="muted small">{days.length ? t('{0} g a day on average', fmtNum(avg('p'))) : ''}</div>
