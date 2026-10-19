@@ -16,6 +16,7 @@ import webpush from 'web-push';
 import * as coachConfig from './coach/config.js';
 import * as coachJobs from './coach/jobs.js';
 import { coachRoutes } from './coach/routes.js';
+import { nutritionRoutes, imagesSupported as nutritionImages, DAILY_CAP as NUTRITION_CAP } from './coach/nutrition.js';
 import { startCadence } from './coach/cadence.js';
 import { startWarmup } from './coach/warmup.js';
 import { dayReminderPush, nudgePush, restTimerPush, testPush } from './push-messages.js';
@@ -1941,7 +1942,9 @@ const routes = {
       // Public like the two flags above: the caps are not a secret, and the absence of the
       // block is how the app knows this server does not take photos and videos at all.
       ...(MEDIA_ON ? { media: mediaConfig(MEDIA_LIMITS) } : {}),
-      ...(readSession(req) ? { coach: coachConfig.publicConfig() } : {})
+      // `images`: whether the provider can read a meal photo (coach/nutrition.js); the app's
+      // Photo button exists only when it can. A description still works without it.
+      ...(readSession(req) ? { coach: (c => (c ? { ...c, images: nutritionImages(), mealCap: NUTRITION_CAP } : c))(coachConfig.publicConfig()) } : {})
     });
   },
 
@@ -2574,6 +2577,9 @@ const routes = {
   // them: they are closures over db and SECRET, and passing them in keeps that module free of
   // a cycle. Every one of them is inert while the feature is unconfigured.
   ...coachRoutes({ json, readBody, readSession, requireAdmin }),
+  // Meal estimates from a photo or a description (coach/nutrition.js): the same provider and
+  // switches as the Coach, inert while it is off.
+  ...nutritionRoutes({ json, readBody, readSession }),
 
   /* ---------- photos & videos ---------- */
   // Absent, not refusing, when MEDIA_UPLOADS=0: a 404 is what a server from before the feature

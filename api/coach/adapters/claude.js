@@ -79,6 +79,7 @@ function spawnAsCoach({ command, args, cwd, env, signal }) {
 export default {
   id: 'claude',
   spawns: true,
+  images: true,
   runtime: 'Claude Agent SDK',
 
   /* Importing the package is the check: it is exactly what a job will do, and it is the one
@@ -92,7 +93,7 @@ export default {
     return { ok: true, version: v ? `Claude Agent SDK ${v}` : 'Claude Agent SDK' };
   },
 
-  async invoke({ prompt, jobDir, env, model, timeoutMs }) {
+  async invoke({ prompt, jobDir, env, model, timeoutMs, images = null, baseSystem = null }) {
     const m = await sdk();
     if (!m) return { code: -1, text: '', stderr: `${PKG} is not installed`, timedOut: false, spawnError: true };
 
@@ -101,8 +102,19 @@ export default {
     const timer = setTimeout(() => { timedOut = true; abortController.abort(); }, timeoutMs);
 
     try {
+      // A photo cannot ride in a string prompt. The SDK's streaming input takes one user message
+      // in the Messages API's own shape — the image blocks, then the words — and with maxTurns 1
+      // and no tools the run ends at the one answer, as it does for a string.
+      const input = Array.isArray(images) && images.length
+        ? (async function* () {
+          yield {
+            type: 'user', parent_tool_use_id: null,
+            message: { role: 'user', content: [...images.map(i => ({ type: 'image', source: { type: 'base64', media_type: i.mime, data: i.data } })), { type: 'text', text: prompt }] }
+          };
+        })()
+        : prompt;
       for await (const message of m.query({
-        prompt,
+        prompt: input,
         options: {
           ...LOCKDOWN,
           abortController,
@@ -112,7 +124,8 @@ export default {
           // and the VAPID keys cannot reach the model process by inheritance.
           env: { ...env, CLAUDE_AGENT_SDK_CLIENT_APP: CLIENT_APP },
           model: model || undefined,
-          systemPrompt: SYSTEM_PROMPT,
+          // A nutrition job brings its own rules; every training job keeps the Coach's.
+          systemPrompt: baseSystem || SYSTEM_PROMPT,
           stderr: data => { if (stderr.length < OUTPUT_CAP) stderr += data; },
           spawnClaudeCodeProcess: spawnAsCoach
         }

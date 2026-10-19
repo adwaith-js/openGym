@@ -10,9 +10,9 @@ export const geminiSpec = {
   headers: key => ({ 'x-goog-api-key': key }),
   // No responseSchema on purpose: Gemini's OpenAPI subset rejects the type unions our schemas
   // use for before/after, and json mime plus the validator already holds the line.
-  body: ({ prompt, system, maxTokens }) => ({
-    systemInstruction: { parts: [{ text: system ? SYSTEM_PROMPT + '\n\n' + system : SYSTEM_PROMPT }] },
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+  body: ({ prompt, system, maxTokens, images, baseSystem }) => ({
+    systemInstruction: { parts: [{ text: system ? (baseSystem || SYSTEM_PROMPT) + '\n\n' + system : (baseSystem || SYSTEM_PROMPT) }] },
+    contents: [{ role: 'user', parts: [...(images || []).map(i => ({ inline_data: { mime_type: i.mime, data: i.data } })), { text: prompt }] }],
     generationConfig: { responseMimeType: 'application/json', maxOutputTokens: maxTokens }
   }),
   errorMessage: data => data && data.error && data.error.message,

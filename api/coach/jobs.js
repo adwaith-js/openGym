@@ -123,12 +123,12 @@ export function capState(uid) {
 }
 // The instance-wide count is kept the same way in coach.json, not read off the job log: the
 // log keeps its last hundred entries, and a count that stops at a hundred is not a cap.
-function bumpInstanceDaily() {
+export function bumpInstanceDaily() {
   const cur = cfgStore.load().daily;
   const d = todayISO();
   cfgStore.save({ daily: cur?.date === d ? { date: d, count: cur.count + 1 } : { date: d, count: 1 } });
 }
-function instanceUsedToday() {
+export function instanceUsedToday() {
   const daily = cfgStore.load().daily;
   return daily?.date === todayISO() ? daily.count : 0;
 }
@@ -427,7 +427,7 @@ export function resolvePending(uid, { accepted = [], rejected = [], dismissed = 
  * afterwards, and nobody else on the container can read it. chmod before chown, while this
  * process is still the owner — CAP_FOWNER is not in the capability set either.
  */
-function shareJobDir(jobDir, ids) {
+export function shareJobDir(jobDir, ids) {
   fs.chmodSync(jobDir, 0o770);
   fs.chownSync(jobDir, process.getuid ? process.getuid() : 0, ids.gid);
 }
@@ -443,7 +443,7 @@ function shareJobDir(jobDir, ids) {
  * owns. Best effort throughout: a leaked temp directory is a worse outcome than a failed job
  * only in the sense that it is not one.
  */
-function removeJobDir(jobDir, ids) {
+export function removeJobDir(jobDir, ids) {
   if (ids) {
     try {
       const mine = fs.readdirSync(jobDir).map(n => path.join(jobDir, n));

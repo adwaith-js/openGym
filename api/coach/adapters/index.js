@@ -18,6 +18,7 @@ import anthropic from '../core/adapters/anthropic.js';
 import openai from '../core/adapters/openai.js';
 import gemini from '../core/adapters/gemini.js';
 import compatible from '../core/adapters/compatible.js';
+import { FIXTURE_MEAL } from '../core/nutrition.js';
 
 /**
  * The in-repo fake provider. Ships with the image on purpose: it is what CI drives, and it
@@ -28,9 +29,12 @@ const FIXTURE = new URL('../fixture-cli.mjs', import.meta.url).pathname;
 const fixture = {
   id: 'fixture',
   spawns: true,
+  images: true,
   cli: process.execPath,
   async check() { return { ok: true, version: 'fixture' }; },
-  async invoke({ prompt, jobDir, env, timeoutMs }) {
+  async invoke({ prompt, jobDir, env, timeoutMs, kind }) {
+    // A meal estimate is answered in-process: the fixture CLI speaks the training contract only.
+    if (kind === 'meal') return { code: 0, text: JSON.stringify(FIXTURE_MEAL), stderr: '', timedOut: false, spawnError: false };
     const r = await run(process.execPath, [FIXTURE], {
       stdin: prompt, cwd: jobDir, timeoutMs,
       // The fixture needs its mode knob, which the sanitised job env deliberately drops.

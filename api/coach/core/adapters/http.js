@@ -113,6 +113,9 @@ export function httpAdapter(spec) {
     // The two facts the server's job runner branches on. Stated, not inferred from absence.
     spawns: false,
     needsRuntime: false,
+    // Every HTTPS spec can carry a photo; whether the chosen model can see is the provider's
+    // answer, and a model that cannot fails the job with the provider's own words.
+    images: true,
 
     baseUrl: cfg => baseUrlFor(id, cfg),
 
@@ -158,6 +161,11 @@ export function httpAdapter(spec) {
      */
     async invoke(opts = {}) {
       const { cfg, prompt, system, schema, env, model, timeoutMs = DEFAULT_TIMEOUT_MS, maxTokens = MAX_OUTPUT_TOKENS, fetch: fetchImpl = globalThis.fetch, signal } = opts;
+      // A meal photo (api/coach/nutrition.js): [{ mime, data }] with data base64, sent as the
+      // provider's own image part. `baseSystem` replaces the training rules for a job that is
+      // not about training; every spec falls back to SYSTEM_PROMPT without it.
+      const images = Array.isArray(opts.images) && opts.images.length ? opts.images : null;
+      const baseSystem = opts.baseSystem || null;
       const base = adapter.baseUrl(cfg);
       if (!base) return { code: -1, text: '', stderr: `no endpoint configured for ${id}`, spawnError: true };
       const key = keyOf(env);
@@ -165,7 +173,7 @@ export function httpAdapter(spec) {
       const chosen = model || meta.defaultModel;
       if (!chosen) return { code: 1, text: '', stderr: `no model chosen for ${id} (pick one from the list the endpoint serves)` };
 
-      let body = spec.body({ model: chosen, prompt, system: system || null, schema: schema || null, maxTokens });
+      let body = spec.body({ model: chosen, prompt, system: system || null, schema: schema || null, maxTokens, images, baseSystem });
       let retriedWithoutJsonMode = false;
       let transientRetries = 0;
       for (;;) {

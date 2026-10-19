@@ -2598,6 +2598,98 @@ paths:
         '429': { $ref: '#/components/responses/CoachRefused' }
         '503': { $ref: '#/components/responses/CoachOff' }
 
+  /api/nutrition/estimate:
+    post:
+      tags: [coach]
+      operationId: postNutritionEstimate
+      summary: Estimate a meal's kcal and macros from a photo or a description
+      description: |
+        Starts one estimate on the instance's Coach provider. Nothing is logged: the answer is
+        shown to the person as a card they edit and confirm, and only the app writes the
+        food-log entry. Needs the profile's own consent (`nutConsent.agreedAt` in its state),
+        separate from the training Coach's. Counted against `NUTRITION_DAILY_CAP` per profile
+        (30 by default) and against the instance cap. The photo is held in memory for the length
+        of the call and never stored.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                image:
+                  type: object
+                  description: A JPEG, PNG or WebP of at most 2 MB, checked by its own bytes.
+                  properties:
+                    mime: { type: string, enum: [image/jpeg, image/png, image/webp] }
+                    data: { type: string, description: Base64 of the file. }
+                  required: [mime, data]
+                note:
+                  type: string
+                  maxLength: 400
+                  description: The person's own words about the meal; required without `image`.
+                meal:
+                  type: string
+                  enum: [breakfast, lunch, dinner, snack]
+                lang:
+                  type: string
+                  description: The language the app is showing; names come back in it.
+      responses:
+        '202': { $ref: '#/components/responses/CoachJobQueued' }
+        '400':
+          description: >-
+            No usable photo or description (`code: input`), or a photo while the provider
+            cannot read images (`code: noimages`).
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/CoachRefused' }
+        '409': { $ref: '#/components/responses/CoachRefused' }
+        '429': { $ref: '#/components/responses/CoachRefused' }
+        '503': { $ref: '#/components/responses/CoachOff' }
+    get:
+      tags: [coach]
+      operationId: getNutritionEstimate
+      summary: The profile's latest meal estimate
+      description: |
+        `job.state` is `running`, `ready` (with `result`) or `failed` (with `errorClass`). A
+        finished estimate is kept ten minutes or until `POST /api/nutrition/estimate/done`; a
+        restart loses it. `cap` is today's count against the daily limit.
+      responses:
+        '200':
+          description: The latest estimate, or `job: null`.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job:
+                    oneOf:
+                      - type: 'null'
+                      - type: object
+                        properties:
+                          id: { type: string }
+                          state: { type: string, enum: [running, ready, failed] }
+                          errorClass: { type: string }
+                          result:
+                            type: object
+                            description: >-
+                              `{ food: true, name, items: [{ name, grams, kcal, p, c, f }], kcal,
+                              p, c, f, confidence: high|medium|low, note }`, or `{ food: false,
+                              note }` when the photo held no food.
+                  cap:
+                    type: object
+                    properties: { used: { type: integer }, limit: { type: integer } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/nutrition/estimate/done:
+    post:
+      tags: [coach]
+      operationId: postNutritionEstimateDone
+      summary: Drop the latest meal estimate
+      description: The app has shown the card (logged or not); the server lets go of the answer.
+      responses:
+        '200': { description: Dropped. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   /api/coach/pending/resolve:
     post:
       tags: [coach]

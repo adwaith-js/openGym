@@ -18,11 +18,15 @@ export function chatCompletionsSpec(id, { maxTokensField = 'max_completion_token
     // llama.cpp/Ollama endpoint can reuse its KV prefix cache and only ever re-processes the
     // payload. A schema, when given, turns JSON mode into grammar-constrained decoding —
     // the answer cannot leave the shape, which is most of what the repair round used to fix.
-    body: ({ model, prompt, system, schema, maxTokens }) => ({
+    body: ({ model, prompt, system, schema, maxTokens, images, baseSystem }) => ({
       model,
       messages: [
-        { role: 'system', content: system ? SYSTEM_PROMPT + '\n\n' + system : SYSTEM_PROMPT },
-        { role: 'user', content: prompt }
+        { role: 'system', content: system ? (baseSystem || SYSTEM_PROMPT) + '\n\n' + system : (baseSystem || SYSTEM_PROMPT) },
+        // A photo rides as a data: URL image part, the one form every Chat Completions server
+        // that can see at all accepts (OpenAI, Ollama's vision models, LM Studio, OpenRouter).
+        { role: 'user', content: images
+          ? [{ type: 'text', text: prompt }, ...images.map(i => ({ type: 'image_url', image_url: { url: `data:${i.mime};base64,${i.data}` } }))]
+          : prompt }
       ],
       ...(temperature != null ? { temperature } : {}),
       response_format: schema

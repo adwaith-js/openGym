@@ -28,6 +28,8 @@ export function argvFor(model) {
 
 export default {
   id: 'codex',
+  // The CLI takes a prompt on stdin and nothing else here: no photos, so no meal-photo logging.
+  images: false,
   spawns: true,
   cli: CLI,
 
