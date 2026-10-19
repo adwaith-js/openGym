@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   addDays, daysBetween, normalizeProfile, missingFields, bmr, computeTargets, boundTargets, macroKcal,
   normalizeEntry, normalizeFood, entryFromFood, scaleMacros, dayTotals, remaining, byMeal, mealFor,
-  dailySeries, loggedDays, weightTrend, suggestAdjustment, expirePhotos, normalizeNutritionState, LIMITS
+  dailySeries, loggedDays, weightTrend, suggestAdjustment, expirePhotos, normalizeNutritionState, LIMITS,
+  trainingPerWeek, suggestActivity
 } from './nutrition.js'
 
 const PROFILE = { sex: 'male', age: 27, heightCm: 174, weightKg: 95, targetKg: 80, activity: 'moderate', goal: 'lose', pace: 0.5 }
@@ -241,5 +242,21 @@ describe('an old profile, or an old backup', () => {
     expect(S.foodLog.map(e => e.id)).toEqual(['a'])
     expect(S.foods.map(f => f.id)).toEqual(['f'])
     expect(S.nutTargets).toEqual({ kcal: 1908, p: 150, c: 0, f: 0, source: 'manual', at: 7 })
+  })
+})
+
+describe('the training log', () => {
+  it('counts training days a week, a day with two sessions once', () => {
+    const w = d => ({ id: d, d })
+    const log = [w('2026-10-19'), w('2026-10-19'), w('2026-10-17'), w('2026-10-15'), w('2026-10-12'), w('2026-10-08'), w('2026-10-05'), w('2026-09-30'), w('2026-09-20')]
+    expect(trainingPerWeek(log, '2026-10-19')).toBe(1.8)
+    expect(trainingPerWeek([], '2026-10-19')).toBe(0)
+  })
+  it('turns that into a starting activity level', () => {
+    expect(suggestActivity(0)).toBe('sedentary')
+    expect(suggestActivity(2)).toBe('light')
+    expect(suggestActivity(4)).toBe('moderate')
+    expect(suggestActivity(4, { activeJob: true })).toBe('high')
+    expect(suggestActivity(7, { activeJob: true })).toBe('athlete')
   })
 })

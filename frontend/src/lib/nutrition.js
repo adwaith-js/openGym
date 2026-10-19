@@ -363,3 +363,22 @@ export function normalizeNutritionState(S) {
   S.nutTargets = t ? { ...t, source: ['calc', 'manual', 'coach'].includes(S.nutTargets?.source) ? S.nutTargets.source : 'manual', at: finite(S.nutTargets?.at) ? num(S.nutTargets.at) : null } : null
   return S
 }
+
+/* ------------------------------------------------------------------ from the training log */
+
+/** Training days a week over the last `days` before `today`, from the logged workouts. */
+export function trainingPerWeek(workouts, today, days = 28) {
+  const from = addDays(today, -days)
+  const seen = new Set((Array.isArray(workouts) ? workouts : []).filter(w => w && ISO.test(w.d || '') && w.d > from && w.d <= today).map(w => w.d))
+  return Math.round((seen.size / days) * 7 * 10) / 10
+}
+
+/**
+ * An activity level to start the intake from: the logged training days a week, nudged up a
+ * level by a job on your feet. Only a starting point; the person picks.
+ */
+export function suggestActivity(perWeek, { activeJob = false } = {}) {
+  const order = Object.keys(ACTIVITY)
+  const i = perWeek < 1 ? 0 : perWeek < 3 ? 1 : perWeek < 5 ? 2 : perWeek < 6.5 ? 3 : 4
+  return order[Math.min(order.length - 1, i + (activeJob ? 1 : 0))]
+}

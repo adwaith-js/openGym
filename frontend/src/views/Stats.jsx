@@ -27,6 +27,7 @@ import { anchorsByWorkout, resolveSetRir } from '../lib/recovery.js'
 import { Button, Segmented, SelectRow } from '../components/ui.jsx'
 import { tappable } from '../lib/use-sheet-keyboard.js'
 import { isWarmupRow } from '../lib/workout-model.js'
+import { dailySeries, addDays } from '../lib/nutrition.js'
 
 // Set 1 to 5 on the per-set chart — system colours, so each line keeps its hue in dark mode.
 const SET_COLORS = ['var(--blue)', 'var(--green)', 'var(--orange)', 'var(--purple)', 'var(--pink)']
@@ -693,6 +694,8 @@ export default function Stats() {
         </div>}
       </div>
 
+      {(S.foodLog || []).length > 0 && <NutritionTrend S={S} range={range} onOpen={() => nav('/nutrition')} />}
+
       <div className="card">
         <h2>{t('Exercise progress')}</h2>
         {exHist.length ? <>
@@ -753,4 +756,31 @@ export default function Stats() {
       <div className="list">{[...workouts].reverse().slice(0, 6).map(w => <WorkoutRow key={w.id} w={w} onClick={() => workoutDetailSheet(w)} />)}</div>
     </>}
   </>
+}
+
+/* Calories and protein per logged day, beside the body-weight curve and over the same range, each
+   with its target as the goal line. Days with nothing logged are left out rather than drawn as
+   zero: an unlogged day is not a day of fasting. */
+function NutritionTrend({ S, range, onOpen }) {
+  const today = todayISO()
+  const days = useMemo(() => {
+    const logged = (S.foodLog || []).map(e => e?.d).filter(Boolean).sort()
+    if (!logged.length) return []
+    const from = range ? addDays(today, -range) : logged[0]
+    return dailySeries(S.foodLog, from < logged[0] ? logged[0] : from, today).filter(r => r.logged)
+  }, [S.foodLog, range, today])
+  const pts = k => days.map(r => ({ t: new Date(r.d + 'T12:00:00').getTime(), y: r[k], d: r.d }))
+  const avg = k => (days.length ? Math.round(days.reduce((n, r) => n + r[k], 0) / days.length) : null)
+  const tg = S.nutTargets
+  return <div className="card">
+    <div className="row between" style={{ marginBottom: 8 }}>
+      <h2 style={{ margin: 0 }}>{t('Calories')}</h2>
+      <Button size="sm" variant="ghost" trailingIcon="chevronRight" onClick={onOpen}>{t('Nutrition')}</Button>
+    </div>
+    <div className="muted small">{days.length ? t('{0} kcal a day on average over {1} logged days', fmtNum(avg('kcal')), days.length) : t('Nothing logged in this range')}</div>
+    <div className="chart"><LineChart points={pts('kcal')} h={140} unit="kcal" goal={tg?.kcal || null} /></div>
+    <h2 style={{ margin: '14px 0 0' }}>{t('Protein')}</h2>
+    <div className="muted small">{days.length ? t('{0} g a day on average', fmtNum(avg('p'))) : ''}</div>
+    <div className="chart"><LineChart points={pts('p')} h={120} unit="g" color="var(--teal)" goal={tg?.p || null} /></div>
+  </div>
 }

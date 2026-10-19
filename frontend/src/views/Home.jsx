@@ -15,6 +15,7 @@ import { Button } from '../components/ui.jsx'
 import { tappable } from '../lib/use-sheet-keyboard.js'
 import { glyphOf } from '../lib/glyphs.js'
 import { dayNoteOf } from '../lib/day-notes.js'
+import NutritionCard from '../components/NutritionCard.jsx'
 
 // Home = what to do now + a quick glance. Deep charts & history live in Stats.
 export default function Home() {
@@ -157,6 +158,10 @@ export default function Home() {
         </Button>
       </div>}
     </div>
+
+    {/* Today's food: what is left of the calorie and macro targets, and logging in one tap
+        (components/NutritionCard.jsx). Before any targets are set it is a one-line invitation. */}
+    <NutritionCard />
 
     {/* Jump to the gym check-in cards (QR membership codes). Shown here as a quick tap on
         arrival at the gym; folds away per user via the "Gym check-in" switch in Settings. */}
