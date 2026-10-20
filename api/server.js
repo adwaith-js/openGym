@@ -39,6 +39,8 @@ import { excusedOn, nudgeFor, nudgeWindowOpen, toneOf } from './nudge.js';
 
 const PORT = +(process.env.PORT || 3000);
 const DATA = process.env.DATA_DIR || '/data';
+// The host updates this server when the app asks (contrib/pi); see 'POST /api/admin/update'.
+const SELF_UPDATE = /^(1|true|yes|on)$/i.test(process.env.SELF_UPDATE || '');
 const RP_ID = process.env.RP_ID || 'localhost';
 const ORIGIN = process.env.ORIGIN || 'http://localhost:8080';
 const RP_NAME = process.env.RP_NAME || 'openGym';
@@ -2404,6 +2406,29 @@ const routes = {
       if (p && p.hiddenAt === undefined) p.hiddenAt = Date.now();
     } else presence.delete(user.id);
     json(res, 200, { ok: true });
+  },
+
+  /* ---------- self-update (contrib/pi) ---------- */
+  // "Update this server" in Settings. The api cannot run Docker on its host (and must never get
+  // the Docker socket), so it only leaves a request file in DATA_DIR; a systemd path unit on the
+  // host (contrib/pi/install.sh) sees it, pulls the new images, backs up, restarts, and writes
+  // update-status.json back here for the app to show. Off unless the host set SELF_UPDATE=1.
+  'GET /api/admin/update': async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    if (!SELF_UPDATE) return json(res, 200, { enabled: false });
+    let status = null;
+    try { status = JSON.parse(fs.readFileSync(path.join(DATA, 'update-status.json'), 'utf8')); } catch { /* never ran yet */ }
+    json(res, 200, { enabled: true, requested: fs.existsSync(path.join(DATA, 'update-request.json')), status });
+  },
+  'POST /api/admin/update': async (req, res) => {
+    const admin = requireAdmin(req, res); if (!admin) return;
+    if (!SELF_UPDATE) return json(res, 404, { error: 'self-update is not set up on this server' });
+    const file = path.join(DATA, 'update-request.json');
+    if (!fs.existsSync(file)) {
+      fs.writeFileSync(file, JSON.stringify({ at: new Date().toISOString(), by: admin.id }));
+      audit(req, 'admin.update', { user: admin });
+    }
+    json(res, 202, { requested: true });
   },
 
   /* ---------- admin dashboard ---------- */

@@ -33,6 +33,7 @@ import { setRestAccent } from '../lib/rest-alert.js'
 import { CUSTOM, accentKey, adjustedIn, applyAccent, cleanHex, inkOn, isGrey } from '../lib/accent.js'
 import { checkForUpdate, downloadAndInstall, fetchChecksum, RELEASES_PAGE } from '../lib/update.js'
 import { forgetCoach } from '../lib/coach-api.js'
+import SelfUpdateRow from '../components/SelfUpdateRow.jsx'
 import { REST_MAX, REST_PAUSE_MIN, REST_PAUSE_MAX, fmtRest, fmtDuration } from '../lib/duration.js'
 import { starterPlanSheet, confirmSheet, importFromApp, importFromHevy, equipmentProfileSheet, plateInventorySheet, dumbbellInventorySheet, menuSheet } from '../sheets.jsx'
 import Icon from '../components/Icon.jsx'
@@ -810,6 +811,8 @@ export default function Settings({ page = null, find = null, via = null }) {
           with its server, so the row points at the APK for the phone instead. iOS has no APK. */}
       <Section footer={MOBILE ? (android ? t('Releases are checked on GitHub. The download is verified against its checksum before the installer opens.') : null) : t('The web app updates together with your server. The Android app installs its own updates from here.')}>
         <Row icon="info" iconTint="var(--grey)" title={t('Version')} value={'v' + __APP_VERSION__} />
+        {/* The server's own update, for its admin, when the host is set up for it (contrib/pi). */}
+        {!MOBILE && !DEMO && user?.admin && <SelfUpdateRow />}
         {MOBILE
           ? android && <Row icon="download" iconTint="var(--green)"
               title={updateInfo?.hasUpdate ? t('Update to openGym v{0}', updateInfo.latestVersion) : t('Check for updates')}

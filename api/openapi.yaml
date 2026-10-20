@@ -2598,6 +2598,34 @@ paths:
         '429': { $ref: '#/components/responses/CoachRefused' }
         '503': { $ref: '#/components/responses/CoachOff' }
 
+  /api/admin/update:
+    get:
+      tags: [admin]
+      operationId: getAdminUpdate
+      summary: Where the host's self-update stands
+      description: |
+        `enabled` is false unless the host runs contrib/pi and set `SELF_UPDATE=1`. `status` is
+        what the host last wrote: `{ state: checking|updating|updated|uptodate|rolledback|failed|paused,
+        message, version, at }`, or null before the first run. `requested` is true while a request
+        waits for the host.
+      responses:
+        '200': { description: The self-update state. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Not an admin. }
+    post:
+      tags: [admin]
+      operationId: postAdminUpdate
+      summary: Ask the host to update this server now
+      description: |
+        Leaves `update-request.json` in DATA_DIR for the host's path unit, which pulls new
+        images, backs up `data/`, restarts and rolls back a build that is not healthy. The api
+        itself restarts during an update. 404 when self-update is not set up.
+      responses:
+        '202': { description: Requested. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Not an admin. }
+        '404': { description: Self-update is not set up on this server. }
+
   /api/nutrition/estimate:
     post:
       tags: [coach]
