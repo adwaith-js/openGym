@@ -15,7 +15,8 @@
 //   foods      = [{ id, name, kcal, p, c, f, serving?, _ts }]
 
 export const MEALS = ['breakfast', 'lunch', 'dinner', 'snack']
-export const SOURCES = ['manual', 'quick', 'food', 'photo']
+// photo: estimated by the AI from a photo (and maybe words); ai: from a description alone.
+export const SOURCES = ['manual', 'quick', 'food', 'photo', 'ai']
 export const GOALS = ['lose', 'maintain', 'gain', 'recomp']
 // Physical activity level on top of BMR. Training sessions are part of it: someone who lifts four
 // times a week at a desk job is "moderate", not "sedentary".

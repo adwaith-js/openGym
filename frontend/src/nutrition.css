@@ -73,3 +73,7 @@
 .nut-hist .nut-bar-t { height: 6px }
 .nut-hist-v { text-align: end; font-variant-numeric: tabular-nums; font-size: 14px }
 .nut-hist.on { background: var(--surface-2) }
+
+/* The photo attached to an AI log, before it is sent: a preview with a remove button. */
+.nut-attached { position: relative; margin-bottom: 10px }
+.nut-attached .nut-detach { position: absolute; top: 8px; inset-inline-end: 8px; width: 30px; height: 30px; font-size: 13px; background: color-mix(in srgb, #000 55%, transparent); color: #fff }

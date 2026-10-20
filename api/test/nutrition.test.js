@@ -176,3 +176,22 @@ test('with the Coach off there are no estimates at all', () => {
     assert.equal(N.imagesSupported(), true);
   } finally { cfg.save({ enabled: true }); }
 });
+
+test('the rules cover descriptions without a photo, brands and several items', () => {
+  assert.match(MEAL_SYSTEM, /nutrition label/);
+  assert.match(MEAL_SYSTEM, /From words alone/);
+  assert.match(MEAL_SYSTEM, /two items/);
+  const p = buildMealPrompt({ note: 'a scoop of MuscleBlaze whey and an apple', meal: 'snack' });
+  assert.match(p, /There is no photo; estimate from the description alone/);
+  assert.match(p, /"source":"description"/);
+  assert.match(p, /MuscleBlaze whey and an apple/);
+});
+
+test('a description alone goes through to an estimate', async () => {
+  const uid = 'n-words';
+  writeState(DIR, uid, consented());
+  N.enqueue(uid, { note: 'a scoop of MuscleBlaze whey and an apple', meal: 'snack' });
+  const s = await settle(uid);
+  assert.equal(s.job.state, 'ready');
+  N.forget(uid);
+});

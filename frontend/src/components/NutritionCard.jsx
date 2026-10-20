@@ -63,7 +63,7 @@ export default function NutritionCard() {
     </div>
     <MacroBars targets={targets} totals={totals} />
     <div className="nut-actions">
-      {photo && <Button size="sm" variant="tinted" icon="camera" onClick={() => photoMealFlow(today)}>{t('Photo')}</Button>}
+      {photo && <Button size="sm" variant="tinted" icon="sparkles" onClick={() => photoMealFlow(today)}>{t('AI log')}</Button>}
       <Button size="sm" icon="plus" onClick={() => addFoodSheet({ d: today })}>{t('Add food')}</Button>
       <Button size="sm" icon="bolt" onClick={() => quickAddSheet({ d: today })}>{t('Quick add')}</Button>
     </div>

@@ -225,7 +225,7 @@ function EntryRow({ e }) {
     {e.photo ? <MealThumb photo={e.photo} /> : null}
     <span className="nut-entry-m">
       <div className="nut-entry-t">{e.name || t('Quick add')}</div>
-      <div className="nut-entry-s">{e.p || e.c || e.f ? macroLine(e) : e.src === 'photo' ? t('From a photo') : t('Calories only')}</div>
+      <div className="nut-entry-s">{e.p || e.c || e.f ? macroLine(e) : e.src === 'photo' ? t('From a photo') : e.src === 'ai' ? t('AI estimate') : t('Calories only')}</div>
     </span>
     <span className="nut-entry-k">{fmtInt(e.kcal)}</span>
   </button>
@@ -286,7 +286,7 @@ export default function Nutrition() {
         <div style={{ height: 10 }} /><Button variant="primary" icon="target" onClick={() => nav('/nutrition/setup')}>{t('Set my targets')}</Button>
       </>}
       <div className="nut-actions">
-        {photo && <Button size="sm" variant="tinted" icon="camera" onClick={() => photoMealFlow(d)}>{t('Photo')}</Button>}
+        {photo && <Button size="sm" variant="tinted" icon="sparkles" onClick={() => photoMealFlow(d)}>{t('AI log')}</Button>}
         <Button size="sm" icon="plus" onClick={() => addFoodSheet({ d })}>{t('Add food')}</Button>
         <Button size="sm" icon="bolt" onClick={() => quickAddSheet({ d })}>{t('Quick add')}</Button>
       </div>

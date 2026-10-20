@@ -65,7 +65,7 @@ function Review({ d, est, thumb, photo, meal: meal0, note, close }) {
   const scale = x => { setK(x); setEdited(null) }
 
   const log = () => {
-    const e = normalizeEntry({ id: uid(), d, meal: m, name, ...v, src: 'photo', ...(photo ? { photo } : {}), ...(note ? { note } : {}) })
+    const e = normalizeEntry({ id: uid(), d, meal: m, name, ...v, src: photo ? 'photo' : 'ai', ...(photo ? { photo } : {}), ...(note ? { note } : {}) })
     if (!e) { toast(t('Enter a name or the calories')); return }
     update(s => {
       s.foodLog = [...s.foodLog, e]
@@ -88,7 +88,8 @@ function Review({ d, est, thumb, photo, meal: meal0, note, close }) {
     {est.items?.length > 0 && <ul className="nut-items">
       {est.items.map((it, i) => <li key={i}><span>{it.name}{it.grams != null ? ` · ${fmtInt(it.grams * k)} g` : ''}</span><span>{fmtInt(it.kcal * k)} kcal</span></li>)}
     </ul>}
-    {est.note && <div className="small dim" style={{ marginTop: 6 }}>{est.note}</div>}
+    {note && <div className="small" style={{ marginTop: 6 }}>{t('You said: “{0}”', note)}</div>}
+    {est.note && <div className="small dim" style={{ marginTop: 4 }}>{est.note}</div>}
     <div style={{ height: 10 }} />
     <Stepper value={k} step={0.25} min={0.25} max={4} onChange={scale} label={t('Portion')} unit="×" />
     <div className="nut-fields">
@@ -123,6 +124,10 @@ function MealPhotoFlow({ d, close }) {
   const [est, setEst] = useState(null)
   const [thumbUrl, setThumbUrl] = useState(null)
   const [photo, setPhoto] = useState(null)
+  // The photo picked and already shrunk (lib/meal-photo.js preparePhoto), waiting for the words
+  // that go with it. Nothing is sent until "Estimate" is pressed.
+  const [picked, setPicked] = useState(null)
+  const [preparing, setPreparing] = useState(false)
   const camRef = useRef(null)
   const libRef = useRef(null)
   const ctl = useRef(null)
@@ -148,21 +153,33 @@ function MealPhotoFlow({ d, close }) {
     }
   }
 
-  const run = async file => {
+  // A photo is shrunk as soon as it is picked, so the preview shows and an unreadable file is
+  // caught before anything is sent; the estimate waits for the description and the tap.
+  const attach = async file => {
+    setErr(null)
+    setPreparing(true)
+    try {
+      const prepared = await preparePhoto(file)
+      setPicked(prepared)
+      setThumbUrl(URL.createObjectURL(prepared.thumb.blob))
+    } catch (e) {
+      setErr(photoErrorText(e?.code))
+    } finally {
+      setPreparing(false)
+    }
+  }
+  const detach = () => { setPicked(null); setThumbUrl(null); setPhoto(null) }
+
+  const run = async () => {
     setErr(null)
     setStep('reading')
     setWaited(0)
     ctl.current?.abort()
     ctl.current = new AbortController()
     try {
-      let image = null
-      if (file) {
-        const prepared = await preparePhoto(file)
-        image = prepared.ai
-        setThumbUrl(URL.createObjectURL(prepared.thumb.blob))
-        setPhoto(await storeThumb(prepared.thumb))
-      }
-      const r = await ask({ image, note, meal })
+      const image = picked ? picked.ai : null
+      if (picked && !photo) setPhoto(await storeThumb(picked.thumb))
+      const r = await ask({ image, note: note.trim(), meal })
       const job = await waitForEstimate(r.job.id, { signal: ctl.current.signal, onTick: setWaited })
       if (job.state !== 'ready') throw Object.assign(new Error(job.errorClass), { code: job.errorClass })
       if (!job.result.food) { estimateDone(); setErr(job.result.note ? t('No food found in the photo: {0}', job.result.note) : t('No food found in the photo.')); setStep('pick'); return }
@@ -174,7 +191,7 @@ function MealPhotoFlow({ d, close }) {
       setStep('pick')
     }
   }
-  const onFile = e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) run(f) }
+  const onFile = e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) attach(f) }
 
   if (step === 'consent') return <Consent onAgree={agree} onDecline={close} />
 
@@ -188,24 +205,34 @@ function MealPhotoFlow({ d, close }) {
 
   if (step === 'review' && est) return <Review d={d} est={est} thumb={thumbUrl} photo={photo} meal={meal} note={note.trim()} close={close} />
 
+  const ready = !!picked || !!note.trim()
   return <>
-    <h3>{t('Log a meal')}</h3>
+    <h3>{t('Log with AI')}</h3>
     {err && <div className="small" style={{ color: 'var(--orange)', marginBottom: 10 }}>{err}</div>}
-    <Segmented value={meal} onChange={setMeal} options={mealOptions()} />
+    {thumbUrl && <div className="nut-attached">
+      <img className="nut-photo" src={thumbUrl} alt="" />
+      <button className="iconbtn nut-detach" onClick={detach} aria-label={t('Remove photo')}><Icon name="xmark" /></button>
+    </div>}
+    <TextArea rows={3} maxLength={400} value={note} onChange={e => setNote(e.target.value)}
+      placeholder={picked
+        ? t('Add what the photo can’t show: brand, amount, how it was cooked (“2 scoops MuscleBlaze whey in 300 ml milk”)')
+        : t('What did you eat? (“a scoop of MuscleBlaze whey and an apple”)')} />
+    <div className="small dim" style={{ marginTop: 6 }}>{picked
+      ? t('Your words win where they and the photo disagree.')
+      : canPhoto ? t('Describe it, add a photo, or both. Brands and amounts make it more accurate.') : t('Brands and amounts make it more accurate.')}</div>
     <div style={{ height: 10 }} />
-    <TextArea rows={2} maxLength={400} value={note} onChange={e => setNote(e.target.value)}
-      placeholder={canPhoto ? t('Optional: anything the photo cannot show (“half portion, no sauce”)') : t('Describe the meal (“chicken rice, large, with soup”)')} />
+    <Segmented value={meal} onChange={setMeal} options={mealOptions()} />
     <div style={{ height: 12 }} />
     {canPhoto && <>
       <input ref={camRef} type="file" accept="image/*" capture="environment" hidden onChange={onFile} />
       <input ref={libRef} type="file" accept="image/*" hidden onChange={onFile} />
       <div className="row" style={{ gap: 8 }}>
-        <Button variant="primary" icon="camera" style={{ flex: 1 }} onClick={() => camRef.current?.click()}>{t('Take photo')}</Button>
-        <Button icon="image" style={{ flex: 1 }} onClick={() => libRef.current?.click()}>{t('From library')}</Button>
+        <Button size="sm" icon="camera" style={{ flex: 1 }} disabled={preparing} onClick={() => camRef.current?.click()}>{picked ? t('Retake') : t('Take photo')}</Button>
+        <Button size="sm" icon="image" style={{ flex: 1 }} disabled={preparing} onClick={() => libRef.current?.click()}>{t('From library')}</Button>
       </div>
-      <div style={{ height: 8 }} />
+      <div style={{ height: 10 }} />
     </>}
-    <Button icon="pencil" variant={canPhoto ? 'plain' : 'primary'} disabled={!note.trim()} onClick={() => run(null)}>{t('Estimate from the description')}</Button>
+    <Button variant="primary" icon="sparkles" disabled={!ready || preparing} onClick={run}>{preparing ? t('Preparing photo…') : t('Estimate macros')}</Button>
     <div style={{ height: 8 }} />
     <Button variant="ghost" className="dim" onClick={close}>{t('Cancel')}</Button>
   </>
