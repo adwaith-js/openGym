@@ -72,7 +72,7 @@ const clip = (s, n) => String(s == null ? '' : s).replace(/[\u0000-\u001f]+/g, '
  * The user turn: what is known about the meal, as data. `repair` carries the validator's errors
  * from a first answer that did not pass, for the one second try.
  */
-export function buildMealPrompt({ note = '', meal = null, lang = null, hasImage = false, repair = null } = {}) {
+export function buildMealPrompt({ note = '', meal = null, lang = null, hasImage = false, photoCount = hasImage ? 1 : 0, repair = null } = {}) {
   const facts = {
     task: 'estimate_meal',
     source: hasImage ? (note ? 'photo and description' : 'photo') : 'description',
@@ -81,7 +81,9 @@ export function buildMealPrompt({ note = '', meal = null, lang = null, hasImage 
     language: lang && LANG.test(lang) ? lang : 'en'
   };
   const lines = [
-    hasImage ? 'The photo above is the meal.' : 'There is no photo; estimate from the description alone.',
+    !hasImage ? 'There is no photo; estimate from the description alone.'
+      : photoCount > 1 ? `The ${photoCount} photos above are one meal: count each food once, even where two photos show it.`
+        : 'The photo above is the meal.',
     'Write "name", every item name and "note" in the language tagged "' + facts.language + '".',
     'What is known, as data:',
     JSON.stringify(facts)

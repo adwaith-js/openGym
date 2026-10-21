@@ -195,6 +195,68 @@ export function entryFromFood(food, { id, d, meal, qty = 1 }) {
   })
 }
 
+/* ---------- favourites: the saved foods, starred from any logged entry ---------- */
+
+const nameKey = v => cleanName(v).toLowerCase()
+
+/**
+ * The favourite `entry` belongs to, or null: the food it was logged from (by id, so "Oats ×2"
+ * still points at "Oats"), else the one with its name. An entry with no name has none.
+ */
+export function favouriteOf(foods, entry) {
+  if (!entry || !Array.isArray(foods)) return null
+  if (entry.foodId) { const f = foods.find(x => x.id === entry.foodId); if (f) return f }
+  const k = nameKey(entry.name)
+  return k ? foods.find(x => nameKey(x.name) === k) || null : null
+}
+
+/** `foods` with `entry` starred: one serving is exactly what was logged. Unchanged if it already is. */
+export function starEntry(foods, entry, id) {
+  if (!entry || favouriteOf(foods, entry)) return foods
+  const food = normalizeFood({ id, name: entry.name, kcal: entry.kcal, p: entry.p, c: entry.c, f: entry.f })
+  return food ? [...foods, food] : foods
+}
+
+/** `foods` without the favourite `entry` belongs to. The entries already logged stay as they are. */
+export function unstarEntry(foods, entry) {
+  const f = favouriteOf(foods, entry)
+  return f ? foods.filter(x => x !== f) : foods
+}
+
+/** Favourites, the one logged most recently first; never-logged ones after, by name. */
+export function favouritesByUse(foods, foodLog) {
+  const last = new Map()
+  for (const e of foodLog || []) {
+    const f = favouriteOf(foods, e)
+    if (!f) continue
+    const at = e.d + ':' + String(Number(e._ts) || 0).padStart(15, '0')
+    if (!last.has(f.id) || last.get(f.id) < at) last.set(f.id, at)
+  }
+  return [...(foods || [])].sort((a, b) => {
+    const x = last.get(a.id) || '', y = last.get(b.id) || ''
+    return x !== y ? (x < y ? 1 : -1) : a.name.localeCompare(b.name)
+  })
+}
+
+/**
+ * Named meals logged in the last `days` days that are not favourites yet, newest first, one per
+ * name: the list to star a meal from after forgetting to at the time.
+ */
+export function recentUnstarred(foodLog, foods, today, { days = 30, limit = 25 } = {}) {
+  const from = addDays(today, -days)
+  const seen = new Set(), out = []
+  const newest = [...(foodLog || [])].filter(e => e?.name && e.d >= from && e.d <= today)
+    .sort((a, b) => (a.d !== b.d ? (a.d < b.d ? 1 : -1) : (Number(b._ts) || 0) - (Number(a._ts) || 0)))
+  for (const e of newest) {
+    const k = nameKey(e.name)
+    if (seen.has(k)) continue
+    seen.add(k)
+    if (!favouriteOf(foods, e)) out.push(e)
+    if (out.length >= limit) break
+  }
+  return out
+}
+
 /** Every macro of `x` times `k` (a portion slider on a photo estimate). */
 export function scaleMacros(x, k) {
   const m = finite(k) && num(k) > 0 ? num(k) : 1

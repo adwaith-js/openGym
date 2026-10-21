@@ -195,3 +195,43 @@ test('a description alone goes through to an estimate', async () => {
   assert.equal(s.job.state, 'ready');
   N.forget(uid);
 });
+
+/* ---------------------------------------------------------------- several photos */
+
+test('several photos of one meal go to the provider together, with the words after them', async () => {
+  const uid = 'n-photos';
+  writeState(DIR, uid, consented());
+  // Record what the fixture is handed, then put it back as it was.
+  const real = ADAPTERS.fixture.invoke;
+  let seen = null;
+  ADAPTERS.fixture.invoke = async opts => { seen = opts; return real.call(ADAPTERS.fixture, opts); };
+  try {
+    const img = { mime: 'image/jpeg', data: JPEG };
+    N.enqueue(uid, { images: [img, img, img], note: 'plus a glass of milk', meal: 'dinner' });
+    const s = await settle(uid);
+    assert.equal(s.job.state, 'ready');
+    assert.equal(seen.images.length, 3);
+    assert.match(seen.prompt, /The 3 photos above are one meal: count each food once/);
+    assert.match(seen.prompt, /"source":"photo and description"/);
+    assert.equal(N.used(uid), 1, 'one estimate however many photos');
+  } finally { ADAPTERS.fixture.invoke = real; N.forget(uid); }
+});
+
+test('more photos than allowed, or one unreadable among them, is refused before anything is spent', () => {
+  const uid = 'n-photos-bad';
+  writeState(DIR, uid, consented());
+  const img = { mime: 'image/jpeg', data: JPEG };
+  assert.throws(() => N.enqueue(uid, { images: Array(N.MAX_IMAGES + 1).fill(img) }), e => e.code === 'input');
+  assert.throws(() => N.enqueue(uid, { images: [img, { mime: 'image/jpeg', data: 'nope' }] }), e => e.code === 'input');
+  assert.equal(N.used(uid), 0);
+});
+
+test('one photo keeps the single-photo wording, and the older `image` field still works', async () => {
+  assert.match(buildMealPrompt({ hasImage: true }), /The photo above is the meal\./);
+  assert.match(buildMealPrompt({ hasImage: true, photoCount: 1 }), /The photo above is the meal\./);
+  const uid = 'n-photo-legacy';
+  writeState(DIR, uid, consented());
+  N.enqueue(uid, { image: { mime: 'image/jpeg', data: JPEG } });
+  assert.equal((await settle(uid)).job.state, 'ready');
+  N.forget(uid);
+});

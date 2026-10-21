@@ -77,3 +77,14 @@
 /* The photo attached to an AI log, before it is sent: a preview with a remove button. */
 .nut-attached { position: relative; margin-bottom: 10px }
 .nut-attached .nut-detach { position: absolute; top: 8px; inset-inline-end: 8px; width: 30px; height: 30px; font-size: 13px; background: color-mix(in srgb, #000 55%, transparent); color: #fff }
+
+/* The favourite star on a logged entry and in the Favourites list. */
+.nut-star { flex: none; font-size: 15px; color: var(--label-3); background: none }
+.nut-star.on { color: var(--yellow) }
+
+/* Several photos of one meal, side by side before the estimate. */
+.nut-pics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px }
+.nut-pics .nut-attached { margin-bottom: 0 }
+.nut-pics .nut-attached:only-child { grid-column: 1 / -1 }
+.nut-pics .nut-photo { aspect-ratio: 4 / 3; max-height: 160px }
+.nut-pics .nut-attached:only-child .nut-photo { aspect-ratio: auto; max-height: 220px }

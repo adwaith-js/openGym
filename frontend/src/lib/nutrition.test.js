@@ -3,7 +3,7 @@ import {
   addDays, daysBetween, normalizeProfile, missingFields, bmr, computeTargets, boundTargets, macroKcal,
   normalizeEntry, normalizeFood, entryFromFood, scaleMacros, dayTotals, remaining, byMeal, mealFor,
   dailySeries, loggedDays, weightTrend, suggestAdjustment, expirePhotos, normalizeNutritionState, LIMITS,
-  trainingPerWeek, suggestActivity
+  trainingPerWeek, suggestActivity, favouriteOf, starEntry, unstarEntry, favouritesByUse, recentUnstarred
 } from './nutrition.js'
 
 const PROFILE = { sex: 'male', age: 27, heightCm: 174, weightKg: 95, targetKg: 80, activity: 'moderate', goal: 'lose', pace: 0.5 }
@@ -258,5 +258,65 @@ describe('the training log', () => {
     expect(suggestActivity(4)).toBe('moderate')
     expect(suggestActivity(4, { activeJob: true })).toBe('high')
     expect(suggestActivity(7, { activeJob: true })).toBe('athlete')
+  })
+})
+
+describe('favourites', () => {
+  const oats = normalizeFood({ id: 'f1', name: 'Overnight oats', kcal: 420, p: 30, c: 55, f: 9 })
+  const whey = normalizeFood({ id: 'f2', name: 'MuscleBlaze whey', kcal: 120, p: 24, c: 3, f: 1.5 })
+  const ai = normalizeEntry({ id: 'e1', d: '2026-10-21', meal: 'lunch', name: 'Chicken rice', kcal: 580, p: 38, c: 70, f: 14, src: 'photo' })
+
+  it('finds the favourite of an entry by the food it came from, else by name', () => {
+    const double = entryFromFood(oats, { id: 'e2', d: '2026-10-21', meal: 'breakfast', qty: 2 })
+    expect(double.name).toBe('Overnight oats ×2')
+    expect(favouriteOf([oats, whey], double)).toBe(oats)
+    expect(favouriteOf([oats, whey], { name: '  muscleblaze   WHEY ' })).toBe(whey)
+    expect(favouriteOf([oats], ai)).toBe(null)
+    expect(favouriteOf([oats], { kcal: 300 })).toBe(null)
+  })
+
+  it('starring an AI-logged entry saves exactly what was logged as one serving, once', () => {
+    const foods = starEntry([oats], ai, 'f3')
+    expect(foods).toHaveLength(2)
+    expect(foods[1]).toEqual({ id: 'f3', name: 'Chicken rice', kcal: 580, p: 38, c: 70, f: 14 })
+    expect(starEntry(foods, ai, 'f4')).toBe(foods)
+    // A quick add has no name to log it again by.
+    const quick = normalizeEntry({ id: 'q', d: '2026-10-21', meal: 'snack', kcal: 200, src: 'quick' })
+    expect(starEntry([oats], quick, 'f5')).toEqual([oats])
+  })
+
+  it('unstarring removes only the favourite, and an unstarred entry changes nothing', () => {
+    expect(unstarEntry([oats, whey], { name: 'Overnight oats' })).toEqual([whey])
+    const foods = [oats, whey]
+    expect(unstarEntry(foods, ai)).toBe(foods)
+  })
+
+  it('lists the most recently logged favourite first, never-logged ones last by name', () => {
+    const pasta = normalizeFood({ id: 'f9', name: 'Pasta', kcal: 600 })
+    const log = [
+      entryFromFood(whey, { id: 'a', d: '2026-10-18', meal: 'snack' }),
+      entryFromFood(oats, { id: 'b', d: '2026-10-20', meal: 'breakfast' }),
+      { ...entryFromFood(whey, { id: 'c', d: '2026-10-21', meal: 'snack' }), _ts: 5 }
+    ]
+    expect(favouritesByUse([pasta, oats, whey], log).map(f => f.id)).toEqual(['f2', 'f1', 'f9'])
+    expect(favouritesByUse([whey, pasta, oats], []).map(f => f.name)).toEqual(['MuscleBlaze whey', 'Overnight oats', 'Pasta'])
+  })
+})
+
+describe('recently logged, not yet a favourite', () => {
+  const oats = normalizeFood({ id: 'f1', name: 'Overnight oats', kcal: 420 })
+  const e = (id, d, name, extra = {}) => normalizeEntry({ id, d, meal: 'lunch', name, kcal: 500, ...extra })
+  it('lists each forgotten meal once, newest first, inside the window, skipping favourites and quick adds', () => {
+    const log = [
+      e('a', '2026-10-21', 'Chicken rice', { _ts: 2 }),
+      e('b', '2026-10-21', 'chicken  RICE', { _ts: 1 }),
+      e('c', '2026-10-20', 'Overnight oats'),
+      e('d', '2026-10-19', 'Paneer wrap'),
+      e('e', '2026-08-01', 'Old pizza'),
+      normalizeEntry({ id: 'q', d: '2026-10-21', meal: 'snack', kcal: 150, src: 'quick' })
+    ]
+    const r = recentUnstarred(log, [oats], '2026-10-21')
+    expect(r.map(x => x.id)).toEqual(['a', 'd'])
+    expect(recentUnstarred(log, [oats], '2026-10-21', { limit: 1 }).map(x => x.id)).toEqual(['a'])
   })
 })

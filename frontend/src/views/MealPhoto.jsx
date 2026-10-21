@@ -11,12 +11,14 @@ import { t } from '../lib/i18n.js'
 import { DEMO } from '../lib/demo.js'
 import { MOBILE } from '../lib/mobile.js'
 import Icon from '../components/Icon.jsx'
-import { Button, NumberField, Segmented, Stepper, Switch, TextArea, TextField } from '../components/ui.jsx'
+import { Button, NumberField, Segmented, Stepper, TextArea, TextField } from '../components/ui.jsx'
 import { useMediaUrl } from '../components/CustomMedia.jsx'
 import { fmtInt, fmtG } from '../components/MacroBars.jsx'
 import '../nutrition.css'
 
 export const NUT_CONSENT_VERSION = 1
+/** Photos of one meal per estimate (the server's MAX_IMAGES). */
+export const MAX_PHOTOS = 4
 const toast = m => useUI.getState().toast(m)
 const nowMeal = () => { const d = new Date(); return mealFor(d.getHours() + d.getMinutes() / 60) }
 const mealOptions = () => [['breakfast', t('Breakfast')], ['lunch', t('Lunch')], ['dinner', t('Dinner')], ['snack', t('Snack')]].map(([value, label]) => ({ value, label }))
@@ -83,6 +85,11 @@ function Review({ d, est, thumb, photo, meal: meal0, note, close }) {
     {thumb && <img className="nut-photo" src={thumb} alt="" />}
     <div className="row between" style={{ marginTop: 10, gap: 8 }}>
       <TextField value={name} maxLength={80} onChange={e => setName(e.target.value)} aria-label={t('Name')} />
+      <button className={'iconbtn nut-star' + (save ? ' on' : '')} style={{ width: 36, height: 36 }} aria-pressed={save}
+        aria-label={save ? t('Remove from favourites') : t('Add to favourites')} onClick={() => setSave(x => !x)}><Icon name={save ? 'starFill' : 'star'} /></button>
+    </div>
+    <div className="row between" style={{ marginTop: 6, gap: 8 }}>
+      <span className="small dim">{save ? t('Saved to favourites when you log it') : t('Tap the star to keep it as a favourite')}</span>
       <span className={'nut-conf' + (est.confidence === 'low' ? ' low' : '')}>{est.confidence === 'high' ? t('Confident') : est.confidence === 'low' ? t('Rough guess') : t('Estimate')}</span>
     </div>
     {est.items?.length > 0 && <ul className="nut-items">
@@ -100,10 +107,6 @@ function Review({ d, est, thumb, photo, meal: meal0, note, close }) {
     </div>
     <div style={{ height: 10 }} />
     <Segmented value={m} onChange={setM} options={mealOptions()} />
-    <div className="lrow" style={{ padding: '10px 2px 0' }}>
-      <span className="lrow-m"><span className="lrow-t">{t('Save to my foods')}</span><span className="lrow-s">{t('Log it again with one tap')}</span></span>
-      <Switch checked={save} onChange={setSave} />
-    </div>
     <div style={{ height: 14 }} />
     <Button variant="primary" icon="check" onClick={log}>{t('Log it')} · {fmtInt(v.kcal)} kcal</Button>
     <div style={{ height: 8 }} />
@@ -112,7 +115,7 @@ function Review({ d, est, thumb, photo, meal: meal0, note, close }) {
   </>
 }
 
-function MealPhotoFlow({ d, close }) {
+function MealPhotoFlow({ d, close, onFavourites }) {
   const S = useStore(s => s.S)
   const config = useStore(s => s.config)
   const update = useStore(s => s.update)
@@ -122,20 +125,22 @@ function MealPhotoFlow({ d, close }) {
   const [waited, setWaited] = useState(0)
   const [err, setErr] = useState(null)
   const [est, setEst] = useState(null)
-  const [thumbUrl, setThumbUrl] = useState(null)
   const [photo, setPhoto] = useState(null)
-  // The photo picked and already shrunk (lib/meal-photo.js preparePhoto), waiting for the words
-  // that go with it. Nothing is sent until "Estimate" is pressed.
-  const [picked, setPicked] = useState(null)
+  // The photos picked so far, each already shrunk (lib/meal-photo.js preparePhoto) with its
+  // preview URL: { prepared, url }. More can be added, and words typed, before anything is sent;
+  // nothing leaves until "Estimate" is pressed.
+  const [pics, setPics] = useState([])
   const [preparing, setPreparing] = useState(false)
+  const thumbUrl = pics[0]?.url || null
+  const picsRef = useRef(pics)
+  picsRef.current = pics
   const camRef = useRef(null)
   const libRef = useRef(null)
   const ctl = useRef(null)
   const canPhoto = photosReadable(config)
 
-  // Leaving the sheet stops the wait; a new photo lets go of the previous preview.
-  useEffect(() => () => ctl.current?.abort(), [])
-  useEffect(() => () => { if (thumbUrl) URL.revokeObjectURL(thumbUrl) }, [thumbUrl])
+  // Leaving the sheet stops the wait and lets go of every preview.
+  useEffect(() => () => { ctl.current?.abort(); picsRef.current.forEach(p => URL.revokeObjectURL(p.url)) }, [])
 
   const agree = () => {
     update(s => { s.nutConsent = { agreedAt: new Date().toISOString(), version: NUT_CONSENT_VERSION } })
@@ -155,20 +160,26 @@ function MealPhotoFlow({ d, close }) {
 
   // A photo is shrunk as soon as it is picked, so the preview shows and an unreadable file is
   // caught before anything is sent; the estimate waits for the description and the tap.
-  const attach = async file => {
+  const attach = async files => {
     setErr(null)
     setPreparing(true)
     try {
-      const prepared = await preparePhoto(file)
-      setPicked(prepared)
-      setThumbUrl(URL.createObjectURL(prepared.thumb.blob))
+      for (const file of files.slice(0, MAX_PHOTOS - picsRef.current.length)) {
+        const prepared = await preparePhoto(file)
+        setPics(ps => [...ps, { prepared, url: URL.createObjectURL(prepared.thumb.blob) }])
+      }
+      if (picsRef.current.length + files.length > MAX_PHOTOS) toast(t('Up to {0} photos per meal', MAX_PHOTOS))
     } catch (e) {
       setErr(photoErrorText(e?.code))
     } finally {
       setPreparing(false)
     }
   }
-  const detach = () => { setPicked(null); setThumbUrl(null); setPhoto(null) }
+  // The first photo's thumbnail is the one kept with the log, so removing it forgets the stored one.
+  const detach = i => {
+    setPics(ps => { URL.revokeObjectURL(ps[i].url); return ps.filter((_, j) => j !== i) })
+    if (i === 0) setPhoto(null)
+  }
 
   const run = async () => {
     setErr(null)
@@ -177,9 +188,9 @@ function MealPhotoFlow({ d, close }) {
     ctl.current?.abort()
     ctl.current = new AbortController()
     try {
-      const image = picked ? picked.ai : null
-      if (picked && !photo) setPhoto(await storeThumb(picked.thumb))
-      const r = await ask({ image, note: note.trim(), meal })
+      const images = pics.map(p => p.prepared.ai)
+      if (pics.length && !photo) setPhoto(await storeThumb(pics[0].prepared.thumb))
+      const r = await ask({ images, note: note.trim(), meal })
       const job = await waitForEstimate(r.job.id, { signal: ctl.current.signal, onTick: setWaited })
       if (job.state !== 'ready') throw Object.assign(new Error(job.errorClass), { code: job.errorClass })
       if (!job.result.food) { estimateDone(); setErr(job.result.note ? t('No food found in the photo: {0}', job.result.note) : t('No food found in the photo.')); setStep('pick'); return }
@@ -191,7 +202,7 @@ function MealPhotoFlow({ d, close }) {
       setStep('pick')
     }
   }
-  const onFile = e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) attach(f) }
+  const onFile = e => { const fs = [...(e.target.files || [])]; e.target.value = ''; if (fs.length) attach(fs) }
 
   if (step === 'consent') return <Consent onAgree={agree} onDecline={close} />
 
@@ -205,14 +216,23 @@ function MealPhotoFlow({ d, close }) {
 
   if (step === 'review' && est) return <Review d={d} est={est} thumb={thumbUrl} photo={photo} meal={meal} note={note.trim()} close={close} />
 
-  const ready = !!picked || !!note.trim()
+  const picked = pics.length > 0
+  const full = pics.length >= MAX_PHOTOS
+  const ready = picked || !!note.trim()
   return <>
-    <h3>{t('Log with AI')}</h3>
+    <div className="row between" style={{ gap: 8 }}>
+      <h3 style={{ margin: 0 }}>{t('Log with AI')}</h3>
+      {onFavourites && S.foods.length > 0 && <Button size="sm" variant="ghost" icon="star" onClick={() => { ctl.current?.abort(); close(); onFavourites(meal) }}>{t('Favourites')}</Button>}
+    </div>
+    <div style={{ height: 12 }} />
     {err && <div className="small" style={{ color: 'var(--orange)', marginBottom: 10 }}>{err}</div>}
-    {thumbUrl && <div className="nut-attached">
-      <img className="nut-photo" src={thumbUrl} alt="" />
-      <button className="iconbtn nut-detach" onClick={detach} aria-label={t('Remove photo')}><Icon name="xmark" /></button>
+    {picked && <div className="nut-pics">
+      {pics.map((p, i) => <div key={p.url} className="nut-attached">
+        <img className="nut-photo" src={p.url} alt="" />
+        <button className="iconbtn nut-detach" onClick={() => detach(i)} aria-label={t('Remove photo')}><Icon name="xmark" /></button>
+      </div>)}
     </div>}
+    {picked && <div className="small dim" style={{ margin: '6px 0 10px' }}>{full ? t('{0} photos, the most for one meal', pics.length) : t('{0} of {1} photos · add another angle, the drink or the side', pics.length, MAX_PHOTOS)}</div>}
     <TextArea rows={3} maxLength={400} value={note} onChange={e => setNote(e.target.value)}
       placeholder={picked
         ? t('Add what the photo can’t show: brand, amount, how it was cooked (“2 scoops MuscleBlaze whey in 300 ml milk”)')
@@ -225,10 +245,10 @@ function MealPhotoFlow({ d, close }) {
     <div style={{ height: 12 }} />
     {canPhoto && <>
       <input ref={camRef} type="file" accept="image/*" capture="environment" hidden onChange={onFile} />
-      <input ref={libRef} type="file" accept="image/*" hidden onChange={onFile} />
+      <input ref={libRef} type="file" accept="image/*" multiple hidden onChange={onFile} />
       <div className="row" style={{ gap: 8 }}>
-        <Button size="sm" icon="camera" style={{ flex: 1 }} disabled={preparing} onClick={() => camRef.current?.click()}>{picked ? t('Retake') : t('Take photo')}</Button>
-        <Button size="sm" icon="image" style={{ flex: 1 }} disabled={preparing} onClick={() => libRef.current?.click()}>{t('From library')}</Button>
+        <Button size="sm" icon="camera" style={{ flex: 1 }} disabled={preparing || full} onClick={() => camRef.current?.click()}>{picked ? t('Add photo') : t('Take photo')}</Button>
+        <Button size="sm" icon="image" style={{ flex: 1 }} disabled={preparing || full} onClick={() => libRef.current?.click()}>{t('From library')}</Button>
       </div>
       <div style={{ height: 10 }} />
     </>}
@@ -238,7 +258,7 @@ function MealPhotoFlow({ d, close }) {
   </>
 }
 
-/** Opens the flow for day `d`. */
-export function photoMealFlow(d) {
-  return useUI.getState().openSheet(close => <MealPhotoFlow d={d} close={close} />)
+/** Opens the flow for day `d`; `onFavourites(meal)` adds a way across to the saved favourites. */
+export function photoMealFlow(d, { onFavourites } = {}) {
+  return useUI.getState().openSheet(close => <MealPhotoFlow d={d} close={close} onFavourites={onFavourites} />)
 }

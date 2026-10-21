@@ -40,6 +40,8 @@ const TIMEOUT_MS = Math.max(60000, Math.min(10 * 60000, +process.env.NUTRITION_T
 const KEEP_MS = 10 * 60000;
 // What the app sends is already shrunk to 1024 px (lib/meal-photo.js); this is a ceiling, not a target.
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
+/** Photos of one meal per estimate; four at the app's 1024 px stay well under the 5 MB body cap. */
+export const MAX_IMAGES = 4;
 const IMAGE_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 const USER_ERROR = {
@@ -116,17 +118,21 @@ export function imagesSupported() {
  * Starts an estimate for `uid`. Throws NutritionError with the code the route maps to a status:
  * off, noimages, busy, cap, consent, shared, unprivileged, input.
  */
-export function enqueue(uid, { image = null, note = '', meal = null, lang = null } = {}) {
+export function enqueue(uid, { image = null, images = null, note = '', meal = null, lang = null } = {}) {
   sweep();
   if (!cfgStore.isEnabled() || !cfgStore.isConnected()) throw new NutritionError('off');
   const cfg = cfgStore.load();
   const adapter = adapterFor(cfg.provider);
   if (!adapter) throw new NutritionError('off');
-  const photo = image ? readImage(image) : null;
-  if (image && !photo) throw new NutritionError('input');
+  // Several photos of one meal (angles, the plate and the drink): `images`; an older app sends
+  // the single `image`. Every one must read as a photo, or nothing is sent.
+  const given = Array.isArray(images) ? images : image ? [image] : [];
+  if (given.length > MAX_IMAGES) throw new NutritionError('input');
+  const photos = given.map(readImage);
+  if (photos.some(p => !p)) throw new NutritionError('input');
   const words = String(note || '').slice(0, 400).trim();
-  if (!photo && !words) throw new NutritionError('input');
-  if (photo && !adapter.images) throw new NutritionError('noimages');
+  if (!photos.length && !words) throw new NutritionError('input');
+  if (photos.length && !adapter.images) throw new NutritionError('noimages');
   if (jobs.get(uid)?.state === 'running') throw new NutritionError('busy');
 
   // Consent is checked here, on the server, not only by the screen that asks for it.
@@ -145,7 +151,7 @@ export function enqueue(uid, { image = null, note = '', meal = null, lang = null
   bump(uid);
   bumpInstanceDaily();
 
-  const job = { id: crypto.randomBytes(8).toString('hex'), uid, photo, note: words, meal, lang: langTag(lang), startedAt: Date.now() };
+  const job = { id: crypto.randomBytes(8).toString('hex'), uid, photos, note: words, meal, lang: langTag(lang), startedAt: Date.now() };
   jobs.set(uid, { id: job.id, state: 'running', at: Date.now() });
   waiting.push(job);
   pump();
@@ -186,9 +192,9 @@ async function execute(job) {
     for (let attempt = 0; attempt < 2; attempt++) {
       const r = await adapter.invoke({
         cfg, kind: 'meal', jobDir, env, model: cfgStore.modelFor(cfg), timeoutMs: TIMEOUT_MS,
-        prompt: buildMealPrompt({ note: job.note, meal: job.meal, lang: job.lang, hasImage: !!job.photo, repair }),
+        prompt: buildMealPrompt({ note: job.note, meal: job.meal, lang: job.lang, hasImage: job.photos.length > 0, photoCount: job.photos.length, repair }),
         system: null, baseSystem: MEAL_SYSTEM, schema: MEAL_SCHEMA,
-        images: job.photo ? [job.photo] : null,
+        images: job.photos.length ? job.photos : null,
         fetch: fetchFor(TIMEOUT_MS), maxTokens: 2000
       });
       if (r.timedOut) return done(job, { state: 'failed', errorClass: 'timeout' });
@@ -206,7 +212,7 @@ async function execute(job) {
     return done(job, { state: 'failed', errorClass: 'unusable', detail: (repair || []).slice(0, 3).join('; ').replace(/"[^"]*"/g, '"…"').slice(0, 300) });
   } finally {
     if (jobDir) removeJobDir(jobDir, unprivilegedIds());
-    job.photo = null;
+    job.photos = [];
   }
 }
 
@@ -236,6 +242,7 @@ export function nutritionRoutes({ json, readBody, readSession }) {
       try {
         const job = enqueue(user.id, {
           image: body.image || null,
+          images: Array.isArray(body.images) ? body.images : null,
           note: body.note ? String(body.note) : '',
           meal: typeof body.meal === 'string' ? body.meal : null,
           lang: typeof body.lang === 'string' ? body.lang : null

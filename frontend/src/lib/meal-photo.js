@@ -71,8 +71,13 @@ export async function storeThumb(thumb) {
 /* ------------------------------------------------------------------ the server */
 
 /** Starts an estimate. Rejects with the server's `code` on e.data.code (see ESTIMATE_ERRORS). */
-export const requestEstimate = ({ image = null, note = '', meal = null }) =>
-  api('/api/nutrition/estimate', { method: 'POST', body: JSON.stringify({ image, note, meal, lang: getLang() }), timeout: 45000 })
+// `images`: up to four photos of the same meal. `image` (one photo) is what older builds send.
+export const requestEstimate = ({ images = null, image = null, note = '', meal = null }) =>
+  api('/api/nutrition/estimate', {
+    method: 'POST',
+    body: JSON.stringify({ ...(images?.length ? { images } : { image }), note, meal, lang: getLang() }),
+    timeout: 60000
+  })
 
 export const estimateStatus = () => api('/api/nutrition/estimate')
 

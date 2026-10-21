@@ -6,7 +6,7 @@ import { useStore } from '../store/useStore.js'
 import { useUI } from '../store/useUI.js'
 import {
   MEALS, normalizeEntry, normalizeFood, entryFromFood, dayTotals, remaining, byMeal, mealFor,
-  loggedDays, suggestAdjustment, boundTargets, addDays, macroKcal
+  loggedDays, suggestAdjustment, boundTargets, addDays, macroKcal, favouriteOf, starEntry, unstarEntry, favouritesByUse, recentUnstarred
 } from '../lib/nutrition.js'
 import { fmtDate, todayISO, uid } from '../lib/format.js'
 import { t } from '../lib/i18n.js'
@@ -14,8 +14,8 @@ import Icon from '../components/Icon.jsx'
 import { Button, NumberField, Segmented, Stepper, Switch, TextField, SearchField } from '../components/ui.jsx'
 import { MacroBars, fmtInt, fmtG } from '../components/MacroBars.jsx'
 import { confirmSheet } from '../sheets.jsx'
-import { photoMealFlow, photoLoggingAvailable, MealThumb } from './MealPhoto.jsx'
-export { photoMealFlow, photoLoggingAvailable }
+import { photoMealFlow as openPhotoFlow, photoLoggingAvailable, MealThumb } from './MealPhoto.jsx'
+export { photoLoggingAvailable }
 import '../nutrition.css'
 
 const update = (fn, ...rest) => useStore.getState().update(fn, ...rest)
@@ -28,10 +28,28 @@ const mealOptions = () => MEALS.map(m => ({ value: m, label: mealLabel(m) }))
 const nowMeal = () => { const d = new Date(); return mealFor(d.getHours() + d.getMinutes() / 60) }
 export const macroLine = e => `${t('P')} ${fmtG(e.p)} · ${t('C')} ${fmtG(e.c)} · ${t('F')} ${fmtG(e.f)}`
 
+/** Stars `entry` (saves it as a favourite, one serving = what was logged) or unstars it. */
+export function toggleFavourite(entry) {
+  const S = useStore.getState().S
+  const on = !!favouriteOf(S.foods, entry)
+  update(s => { s.foods = on ? unstarEntry(s.foods, entry) : starEntry(s.foods, entry, uid()) })
+  toast(on ? t('Removed from favourites') : t('Added to favourites'))
+}
+
+/** The star beside a logged entry: filled when it is a favourite. Hidden for a nameless quick add. */
+function StarButton({ entry, size = 30 }) {
+  const foods = useStore(s => s.S.foods)
+  if (!entry?.name) return null
+  const on = !!favouriteOf(foods, entry)
+  return <button className={'iconbtn nut-star' + (on ? ' on' : '')} style={{ width: size, height: size }}
+    aria-label={on ? t('Remove from favourites') : t('Add to favourites')} aria-pressed={on}
+    onClick={ev => { ev.stopPropagation(); toggleFavourite(entry) }}><Icon name={on ? 'starFill' : 'star'} /></button>
+}
+
 /* ------------------------------------------------------------------ sheets */
 
 /** Add or edit one entry by hand. `entry` edits it; `food` starts from a saved food. */
-function EntryEditor({ d, entry, meal, close }) {
+function EntryEditor({ d, entry, meal, close, inline = false }) {
   const [name, setName] = useState(entry?.name || '')
   const [m, setM] = useState(entry?.meal || meal || nowMeal())
   const [v, setV] = useState({ kcal: entry?.kcal || null, p: entry?.p || null, c: entry?.c || null, f: entry?.f || null })
@@ -61,7 +79,11 @@ function EntryEditor({ d, entry, meal, close }) {
   }
 
   return <>
-    <h3>{entry ? t('Edit entry') : t('Add food')}</h3>
+    {!inline && <div className="row between" style={{ gap: 8 }}>
+      <h3 style={{ margin: 0 }}>{entry ? t('Edit entry') : t('Add food')}</h3>
+      {entry && <StarButton entry={entry} size={34} />}
+    </div>}
+    {!inline && <div style={{ height: 12 }} />}
     <TextField value={name} maxLength={80} placeholder={t('What did you eat?')} onChange={e => setName(e.target.value)} autoFocus={!entry} />
     <div style={{ height: 10 }} />
     <Segmented value={m} onChange={setM} options={mealOptions()} />
@@ -73,7 +95,7 @@ function EntryEditor({ d, entry, meal, close }) {
     </div>
     {!v.kcal && fromMacros > 0 && <div className="small dim" style={{ marginTop: 6 }}>{t('{0} kcal from the macros', fmtInt(fromMacros))}</div>}
     {!entry && <div className="lrow" style={{ padding: '10px 2px 0' }}>
-      <span className="lrow-m"><span className="lrow-t">{t('Save to my foods')}</span><span className="lrow-s">{t('Log it again with one tap')}</span></span>
+      <span className="lrow-m"><span className="lrow-t">{t('Add to favourites')}</span><span className="lrow-s">{t('Log it again with one tap')}</span></span>
       <Switch checked={save} onChange={setSave} />
     </div>}
     <div style={{ height: 14 }} />
@@ -112,45 +134,66 @@ function FoodPortion({ d, food, meal, close }) {
   </>
 }
 
-/** Saved foods first (one tap to log), then "enter it by hand". */
-function AddFood({ d, meal, close }) {
+/** Two tabs: Favourites (starred foods, the last one logged first, one tap to log) and By hand. */
+function AddFood({ d, meal, tab: tab0, close }) {
   const S = useStore(s => s.S)
+  const [tab, setTab] = useState(tab0 || (S.foods.length ? 'fav' : 'hand'))
   const [q, setQ] = useState('')
-  const foods = S.foods.filter(f => !q || f.name.toLowerCase().includes(q.trim().toLowerCase()))
+  const all = useMemo(() => favouritesByUse(S.foods, S.foodLog), [S.foods, S.foodLog])
+  const recent = useMemo(() => recentUnstarred(S.foodLog, S.foods, todayISO()), [S.foodLog, S.foods])
+  const foods = all.filter(f => !q || f.name.toLowerCase().includes(q.trim().toLowerCase()))
   const pick = food => { close(); openSheet(c => <FoodPortion d={d} food={food} meal={meal} close={c} />) }
-  const manual = () => { close(); entrySheet({ d, meal }) }
   const forget = food => confirmSheet({
-    title: t('Remove from my foods?'), message: food.name, confirmText: t('Remove'), danger: true,
+    title: t('Remove from favourites?'), message: food.name, confirmText: t('Remove'), danger: true,
     onConfirm: () => update(s => { s.foods = s.foods.filter(f => f.id !== food.id) })
   })
   return <>
     <h3>{t('Add food')}</h3>
-    {S.foods.length > 0 && <>
-      {S.foods.length > 6 && <><SearchField value={q} onChange={setQ} onClear={() => setQ('')} placeholder={t('Search my foods')} /><div style={{ height: 8 }} /></>}
-      <div className="nut-list" style={{ maxHeight: '44vh', overflowY: 'auto' }}>
+    <Segmented value={tab} onChange={setTab} options={[{ value: 'fav', label: t('Favourites') }, { value: 'hand', label: t('By hand') }]} />
+    <div style={{ height: 12 }} />
+    {tab === 'hand' ? <EntryEditor d={d} meal={meal} close={close} inline /> : <>
+      {all.length > 6 && <><SearchField value={q} onChange={setQ} onClear={() => setQ('')} placeholder={t('Search favourites')} /><div style={{ height: 8 }} /></>}
+      {all.length > 0 && <div className="nut-list" style={{ maxHeight: '48vh', overflowY: 'auto' }}>
         {foods.map(f => <div key={f.id} className="nut-entry" role="button" tabIndex={0} onClick={() => pick(f)}>
           <span className="nut-entry-m">
             <div className="nut-entry-t">{f.name}</div>
             <div className="nut-entry-s">{f.serving ? f.serving + ' · ' : ''}{macroLine(f)}</div>
           </span>
           <span className="nut-entry-k">{fmtInt(f.kcal)}</span>
-          <button className="iconbtn" style={{ width: 28, height: 28, fontSize: 13 }} aria-label={t('Remove')} onClick={e => { e.stopPropagation(); forget(f) }}><Icon name="xmark" /></button>
+          <button className="iconbtn nut-star on" style={{ width: 30, height: 30 }} aria-label={t('Remove from favourites')} onClick={e => { e.stopPropagation(); forget(f) }}><Icon name="starFill" /></button>
         </div>)}
-        {!foods.length && <div className="empty small">{t('No saved food matches')}</div>}
-      </div>
-      <div style={{ height: 12 }} />
+        {!foods.length && <div className="empty small">{t('No favourite matches')}</div>}
+      </div>}
+      {!all.length && <div className="empty small">{t('No favourites yet. Tap the star on anything you log, or on the AI log card, and it shows up here.')}</div>}
+      {!q && recent.length > 0 && <>
+        <h4 className="sec" style={{ margin: '16px 4px 8px' }}>{t('Recently logged')}</h4>
+        <div className="small dim" style={{ margin: '0 4px 8px' }}>{t('Star a meal you forgot to save, and it joins your favourites.')}</div>
+        <div className="nut-list" style={{ maxHeight: '32vh', overflowY: 'auto' }}>
+          {recent.map(e => <div key={e.id} className="nut-entry" role="button" tabIndex={0} onClick={() => toggleFavourite(e)}>
+            {e.photo ? <MealThumb photo={e.photo} /> : null}
+            <span className="nut-entry-m">
+              <div className="nut-entry-t">{e.name}</div>
+              <div className="nut-entry-s">{fmtDate(e.d, true)} · {macroLine(e)}</div>
+            </span>
+            <span className="nut-entry-k">{fmtInt(e.kcal)}</span>
+            <StarButton entry={e} />
+          </div>)}
+        </div>
+      </>}
+      <div style={{ height: 8 }} />
+      <Button variant="ghost" className="dim" onClick={close}>{t('Cancel')}</Button>
     </>}
-    <Button variant="primary" icon="pencil" onClick={manual}>{t('Enter it by hand')}</Button>
-    {!S.foods.length && <div className="small dim" style={{ marginTop: 8 }}>{t('Foods you save show up here, ready to log with one tap.')}</div>}
-    <div style={{ height: 8 }} />
-    <Button variant="ghost" className="dim" onClick={close}>{t('Cancel')}</Button>
   </>
 }
 
-export function addFoodSheet({ d = todayISO(), meal } = {}) {
-  const S = useStore.getState().S
-  if (!S.foods.length) return entrySheet({ d, meal })
-  return openSheet(close => <AddFood d={d} meal={meal} close={close} />)
+/** Add food, on the Favourites tab when there are any (`tab: 'fav' | 'hand'` to choose). */
+export function addFoodSheet({ d = todayISO(), meal, tab } = {}) {
+  return openSheet(close => <AddFood d={d} meal={meal} tab={tab} close={close} />)
+}
+
+/** The AI log, with a way across to the favourites for a meal that is already saved. */
+export function photoMealFlow(d) {
+  return openPhotoFlow(d, { onFavourites: meal => addFoodSheet({ d, meal, tab: 'fav' }) })
 }
 
 /** Calories only, for when the details do not matter. */
@@ -221,14 +264,16 @@ export function targetsSheet() {
 /* ------------------------------------------------------------------ the screen */
 
 function EntryRow({ e }) {
-  return <button className="nut-entry" onClick={() => entrySheet({ d: e.d, entry: e })}>
+  const open = () => entrySheet({ d: e.d, entry: e })
+  return <div className="nut-entry" role="button" tabIndex={0} onClick={open} onKeyDown={ev => { if (ev.key === 'Enter') open() }}>
     {e.photo ? <MealThumb photo={e.photo} /> : null}
     <span className="nut-entry-m">
       <div className="nut-entry-t">{e.name || t('Quick add')}</div>
       <div className="nut-entry-s">{e.p || e.c || e.f ? macroLine(e) : e.src === 'photo' ? t('From a photo') : e.src === 'ai' ? t('AI estimate') : t('Calories only')}</div>
     </span>
     <span className="nut-entry-k">{fmtInt(e.kcal)}</span>
-  </button>
+    <StarButton entry={e} />
+  </div>
 }
 
 export default function Nutrition() {
