@@ -3,6 +3,7 @@
 #
 # Started by the "Update this server" button in Settings: the app leaves
 # data/update-request.json and a systemd path unit runs this (see install.sh). Each run:
+#   0. swaps itself for the branch's newest copy of this script, so fixes reach the Pi
 #   1. pulls the fork's newest images (nothing else changes if there is nothing new)
 #   2. when the running containers are older than what was pulled: backs up data/,
 #      restarts on the new images and checks /api/health
@@ -27,6 +28,22 @@ STATUS="$APP_DIR/data/update-status.json"
 
 cd "$APP_DIR" || exit 1
 log() { echo "$(date '+%F %T') $*" >> "$LOG"; }
+
+# Step 0: the copy in /usr/local/bin was taken when install.sh ran. Fetch the branch's newest
+# copy first and run that instead, so a fix to this script reaches the Pi without logging in.
+# Only a copy that downloads in full and parses replaces this one; any failure keeps this one.
+SELF_URL="${SELF_URL:-https://raw.githubusercontent.com/adwaith-js/openGym/feature/nutrition/contrib/pi/opengym-autoupdate.sh}"
+if [ -z "${OPENGYM_REFRESHED:-}" ] && [ -w "$0" ]; then
+  tmp=$(mktemp)
+  if curl -fsSL --max-time 20 "$SELF_URL" -o "$tmp" 2>/dev/null && bash -n "$tmp" && ! cmp -s "$tmp" "$0"; then
+    install -m 755 "$tmp" "$0"
+    rm -f "$tmp"
+    log "update script refreshed from GitHub"
+    OPENGYM_REFRESHED=1 exec "$0" "$@"
+  fi
+  rm -f "$tmp"
+fi
+
 # Keep the log short: the last 1000 lines are plenty to see what happened.
 trim_log() { [ -f "$LOG" ] && tail -n 1000 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"; }
 trap trim_log EXIT
@@ -62,7 +79,15 @@ healthy() {
 run_api=$(running_id opengym-api-1)
 run_web=$(running_id opengym-web-1)
 
-if ! docker compose pull --quiet >> "$LOG" 2>&1; then
+# The two images are pulled by name, not with `docker compose pull`: the override sets
+# `pull_policy: missing` (so a restart never undoes a rollback), and compose's pull honours
+# that too — it skips any image already on the Pi, so a new :nutrition build was never fetched
+# and every check said "up to date".
+pulled=1
+for img in "$API_IMAGE" "$WEB_IMAGE"; do
+  docker pull --quiet "$img" >> "$LOG" 2>&1 || pulled=0
+done
+if [ "$pulled" != 1 ]; then
   log "pull failed (offline, or GitHub unreachable)"
   status failed "Could not reach GitHub to check for a new build"
   exit 0
@@ -71,7 +96,11 @@ new_api=$(img_id "$API_IMAGE")
 new_web=$(img_id "$WEB_IMAGE")
 
 # Nothing new, or containers already on these images.
-if [ "$new_api" = "$run_api" ] && [ "$new_web" = "$run_web" ]; then status uptodate "Already up to date"; exit 0; fi
+if [ "$new_api" = "$run_api" ] && [ "$new_web" = "$run_web" ]; then
+  log "checked: already on the newest build ($(web_version))"
+  status uptodate "Already up to date"
+  exit 0
+fi
 
 # A build that already failed its health check: keep the running one.
 if [ -f "$BAD" ] && grep -qx "$new_api $new_web" "$BAD"; then
